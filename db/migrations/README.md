@@ -1,0 +1,3 @@
+# Миграции
+
+По одному файлу на изменение: `001_create_users.sql`, `002_create_projects.sql` …
