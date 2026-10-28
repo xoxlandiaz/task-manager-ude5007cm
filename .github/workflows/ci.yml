@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+
+    # Отдельная PostgreSQL для интеграционных тестов API
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: taskmanager_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/taskmanager_test
+      DATABASE_SSL: "false"
+      JWT_SECRET: ci-test-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Apply database schema
+        run: |
+          shopt -s nullglob
+          for f in db/migrations/*.sql; do
+            echo "Applying $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - run: npm test
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose.yml
+        run: cp .env.example .env && docker compose config --quiet
+      - name: Build app image
+        run: docker build -t task-manager .
+      - name: Check nginx config
+        run: |
+          docker run --rm --add-host app:127.0.0.1 \
+            -v "$PWD/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+            nginx:1.27-alpine nginx -t

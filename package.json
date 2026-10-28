@@ -1,0 +1,45 @@
+{
+  "name": "task-manager",
+  "version": "1.0.0",
+  "description": "Task & Project Management System (UDE5007CM): Node.js, Express, PostgreSQL, Bootstrap",
+  "main": "server/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "nodemon server/server.js",
+    "test": "jest --runInBand --passWithNoTests"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "<rootDir>/tests/**/*.test.js"
+    ]
+  },
+  "nodemonConfig": {
+    "watch": [
+      "server"
+    ],
+    "ext": "js,json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xoxlandiaz/task-manager-ude5007cm.git"
+  },
+  "author": "Akmal",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "jest": "^30.5.2",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.3.1"
+  }
+}
