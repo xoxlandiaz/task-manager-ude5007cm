@@ -44,9 +44,7 @@ The token comes from register or login and is valid for `JWT_EXPIRES_IN` (defaul
 | POST | `/auth/register` | Create an account | anyone |
 | POST | `/auth/login` | Sign in | anyone |
 | GET | `/auth/me` | Current user | signed in |
-| GET | `/users` | List or search users | signed in |
 | GET | `/users/me` | Current user | signed in |
-| GET | `/users/:id` | One user | signed in |
 | GET | `/projects` | My projects | signed in |
 | POST | `/projects` | Create a project | signed in |
 | GET | `/projects/:id` | One project | member |
@@ -113,17 +111,11 @@ Errors: `400` validation, `401` `Invalid email or password` (the same message fo
 
 A user object is `{ id, name, email, created_at }`. The password hash is never returned.
 
-### GET /users
-
-Returns an array of users sorted by name. `?search=text` (or `?q=text`) keeps users whose name or email contains the text, ignoring case. Returns at most 100 users, or 50 with a search.
+There is no endpoint that lists users or looks one up by id, so one account cannot collect the emails of the others. To add someone to a project the owner types their exact email (`POST /projects/:id/members`).
 
 ### GET /users/me
 
 Same response as `GET /auth/me`.
-
-### GET /users/:id
-
-`200` one user object. Errors: `400` invalid id, `404`.
 
 ## Projects
 

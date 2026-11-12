@@ -36,39 +36,16 @@ describe('Users API (/api/users)', () => {
     expect(res.body.user.email).toBe('test@example.com');
   });
 
-  it('GET /api/users should list all users', async () => {
-    const res = await request(app)
-      .get('/api/users')
-      .set('Authorization', `Bearer ${token}`);
-
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBe(2);
-    expect(res.body[0]).not.toHaveProperty('password_hash');
-  });
-
-  it('GET /api/users?search=another should filter users', async () => {
-    const res = await request(app)
-      .get('/api/users?search=another')
-      .set('Authorization', `Bearer ${token}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.length).toBe(1);
-    expect(res.body[0].email).toBe('another@example.com');
-  });
-
-  it('GET /api/users/:id should return user by id', async () => {
-    const res = await request(app)
-      .get(`/api/users/${user.id}`)
-      .set('Authorization', `Bearer ${token}`);
-
-    expect(res.status).toBe(200);
-    expect(res.body.id).toBe(user.id);
-    expect(res.body.name).toBe('Test User');
-  });
-
-  it('GET /api/users should reject request without token', async () => {
-    const res = await request(app).get('/api/users');
+  it('GET /api/users/me should reject request without token', async () => {
+    const res = await request(app).get('/api/users/me');
     expect(res.status).toBe(401);
+  });
+
+  it('does not expose a user list, a search or a lookup by id', async () => {
+    for (const path of ['/api/users', '/api/users?search=another', `/api/users/${user.id}`, '/api/users/2']) {
+      const res = await request(app).get(path).set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(404);
+      expect(JSON.stringify(res.body)).not.toContain('another@example.com');
+    }
   });
 });

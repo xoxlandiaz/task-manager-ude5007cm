@@ -6,7 +6,7 @@ const authMiddleware = require('../middleware/auth');
 router.use(authMiddleware);
 
 router.get('/me', usersController.getMe);
-router.get('/', usersController.getUsers);
-router.get('/:id', usersController.getUserById);
+// There is deliberately no user list or lookup by id: it would hand every
+// account's email to anyone who registers. Members are added by exact email.
 
 module.exports = router;

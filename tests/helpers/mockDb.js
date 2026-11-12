@@ -40,21 +40,6 @@ class MockDb {
       return { rows: user ? [{ ...user }] : [], rowCount: user ? 1 : 0 };
     }
 
-    if (/SELECT .* FROM users WHERE lower\(name\) LIKE \$1/i.test(text)) {
-      const term = (params[0] || '').replace(/%/g, '').toLowerCase();
-      const rows = this.users.filter(
-        (u) => u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term)
-      );
-      return { rows: rows.map((u) => ({ id: u.id, name: u.name, email: u.email, created_at: u.created_at })), rowCount: rows.length };
-    }
-
-    if (/SELECT .* FROM users ORDER BY name ASC/i.test(text)) {
-      const rows = [...this.users]
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((u) => ({ id: u.id, name: u.name, email: u.email, created_at: u.created_at }));
-      return { rows, rowCount: rows.length };
-    }
-
     if (/INSERT INTO users/i.test(text)) {
       const [name, email, password_hash] = params;
       const user = {

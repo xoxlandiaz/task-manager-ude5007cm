@@ -307,14 +307,4 @@ describeWithDb('API against a real PostgreSQL database', () => {
       expect((await as(owner, request(app).get(`/api/tasks/${taskId}`))).status).toBe(404);
     });
   });
-
-  describe('users', () => {
-    it('searches by name or email without exposing password hashes', async () => {
-      const res = await as(owner, request(app).get('/api/users?search=MARK'));
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(1);
-      expect(res.body[0]).toMatchObject({ id: member.id, name: member.name, email: member.email });
-      expect(res.body[0].password_hash).toBeUndefined();
-    });
-  });
 });

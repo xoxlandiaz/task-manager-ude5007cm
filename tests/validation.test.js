@@ -163,14 +163,6 @@ describe('Input validation edge cases', () => {
     });
   });
 
-  describe('users search', () => {
-    it('does not crash when search is repeated in the query string', async () => {
-      const res = await auth(request(app).get('/api/users?search=a&search=b'));
-      expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
-    });
-  });
-
   describe('request body', () => {
     it('answers malformed JSON with 400 and a plain message', async () => {
       const res = await request(app)
@@ -204,7 +196,7 @@ describe('Input validation edge cases', () => {
     });
 
     it('is rejected in the query string', async () => {
-      const res = await auth(request(app).get('/api/users?search=a%00'));
+      const res = await auth(request(app).get('/api/projects?filter=a%00'));
       expect(res.status).toBe(400);
       expect(res.body).toEqual(invalid);
     });
