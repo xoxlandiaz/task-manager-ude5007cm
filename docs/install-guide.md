@@ -54,7 +54,18 @@ Stop: `Ctrl+C`, then `docker compose down` (add `-v` to delete the database).
 npm test
 ```
 
-Tests need a running PostgreSQL and `DATABASE_URL` pointing to a test database.
+Most tests replace the database with an in-memory mock and need nothing else.
+
+`tests/integration.test.js` runs the API against a real PostgreSQL. It clears every table, so it only runs when `DATABASE_URL` points to a database whose name ends with `_test` and the migrations are applied; otherwise it is skipped:
+
+```
+createdb taskmanager_test
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/taskmanager_test
+for f in db/migrations/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"; done
+npm test
+```
+
+CI runs it this way on every push.
 
 ## Environment variables
 
