@@ -8,4 +8,6 @@
 - `controllers/` — логика обработчиков
 - `middleware/` — `auth` (JWT), `validate`, `errorHandler`
 - `validators/` — правила валидации входных данных
-- `utils/` — вспомогательные функции
+- `utils/` — вспомогательные функции (JWT, bcrypt, разбор id, класс ошибок)
+
+Документация эндпоинтов: [docs/api.md](../docs/api.md).
