@@ -11,8 +11,16 @@
  *
  *   DATABASE_URL=postgres://postgres:postgres@localhost:5432/taskmanager_test npm test
  */
-const databaseUrl = process.env.DATABASE_URL || '';
-const isTestDatabase = /\/[^/?]*_test(\?|$)/.test(databaseUrl);
+function isTestDatabaseUrl(url) {
+  try {
+    // Only the path is the database name; the query string is ignored.
+    return new URL(url).pathname.endsWith('_test');
+  } catch {
+    return false;
+  }
+}
+
+const isTestDatabase = isTestDatabaseUrl(process.env.DATABASE_URL || '');
 const describeWithDb = isTestDatabase ? describe : describe.skip;
 
 describeWithDb('API against a real PostgreSQL database', () => {
@@ -73,6 +81,17 @@ describeWithDb('API against a real PostgreSQL database', () => {
 
       const bad = await request(app).post('/api/auth/login').send({ email: owner.email, password: 'wrong-password' });
       expect(bad.status).toBe(401);
+    });
+
+    it('gives every simultaneous duplicate registration the same 409', async () => {
+      const twin = { name: 'Twin', email: 'twin@example.com', password: 'Password123!' };
+      const results = await Promise.all([1, 2, 3, 4].map(() => request(app).post('/api/auth/register').send(twin)));
+
+      expect(results.filter((r) => r.status === 201)).toHaveLength(1);
+      results.filter((r) => r.status !== 201).forEach((r) => {
+        expect(r.status).toBe(409);
+        expect(r.body.error).toBe('Email already registered');
+      });
     });
 
     it('returns the current user for a valid token', async () => {
@@ -172,11 +191,13 @@ describeWithDb('API against a real PostgreSQL database', () => {
     });
 
     it('updates part of a task and lets the trigger move updated_at', async () => {
-      const before = await as(member, request(app).get(`/api/tasks/${taskId}`));
       const res = await as(member, request(app).put(`/api/tasks/${taskId}`)).send({ status: 'done', due_date: null });
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ status: 'done', due_date: null, title: 'Build the API', priority: 'high' });
-      expect(new Date(res.body.updated_at).getTime()).toBeGreaterThan(new Date(before.body.updated_at).getTime());
+
+      // Compared in SQL: timestamps keep microseconds there, JavaScript dates do not.
+      const row = await pool.query('SELECT updated_at > created_at AS moved FROM tasks WHERE id = $1', [taskId]);
+      expect(row.rows[0].moved).toBe(true);
     });
 
     it('counts tasks and members on the project', async () => {
@@ -207,9 +228,47 @@ describeWithDb('API against a real PostgreSQL database', () => {
     });
 
     it('lets only the author or the project owner delete a comment', async () => {
+      // A second member who neither wrote the comment nor owns the project
+      await as(owner, request(app).post(`/api/projects/${projectId}/members`)).send({ email: stranger.email });
       expect((await as(stranger, request(app).delete(`/api/comments/${commentId}`))).status).toBe(403);
+      await as(owner, request(app).delete(`/api/projects/${projectId}/members/${stranger.id}`));
+
+      // The project owner may delete someone else's comment
       expect((await as(owner, request(app).delete(`/api/comments/${commentId}`))).status).toBe(204);
       expect((await as(owner, request(app).delete(`/api/comments/${commentId}`))).status).toBe(404);
+
+      // The author may delete their own
+      const own = await as(member, request(app).post(`/api/tasks/${taskId}/comments`)).send({ body: 'My own comment' });
+      expect((await as(member, request(app).delete(`/api/comments/${own.body.id}`))).status).toBe(204);
+    });
+
+    it('stops a removed member from deleting the comments they left behind', async () => {
+      await as(owner, request(app).post(`/api/projects/${projectId}/members`)).send({ email: stranger.email });
+      const left = await as(stranger, request(app).post(`/api/tasks/${taskId}/comments`)).send({ body: 'Left behind' });
+      await as(owner, request(app).delete(`/api/projects/${projectId}/members/${stranger.id}`));
+
+      expect((await as(stranger, request(app).delete(`/api/comments/${left.body.id}`))).status).toBe(403);
+      expect((await as(owner, request(app).delete(`/api/comments/${left.body.id}`))).status).toBe(204);
+    });
+
+    it('never leaves a task assigned to a member who is being removed at the same moment', async () => {
+      for (let round = 0; round < 10; round += 1) {
+        await as(owner, request(app).post(`/api/projects/${projectId}/members`)).send({ email: stranger.email });
+        await Promise.all([
+          as(owner, request(app).put(`/api/tasks/${taskId}`)).send({ assignee_id: stranger.id }),
+          as(owner, request(app).delete(`/api/projects/${projectId}/members/${stranger.id}`)),
+        ]);
+      }
+
+      const orphans = await pool.query(
+        `SELECT t.id FROM tasks t
+         WHERE t.assignee_id IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM project_members pm
+             WHERE pm.project_id = t.project_id AND pm.user_id = t.assignee_id
+           )`
+      );
+      expect(orphans.rows).toEqual([]);
     });
 
     it('unassigns the tasks of a removed member and revokes their access', async () => {

@@ -10,6 +10,7 @@ const PG_CLIENT_ERRORS = {
   22007: [400, 'Invalid date format'], // invalid_datetime_format
   22008: [400, 'A date is out of range'], // datetime_field_overflow
   22001: [400, 'A value is too long'], // string_data_right_truncation
+  22021: [400, 'Text contains an invalid character'], // character_not_in_repertoire
 };
 
 // Every error response has the same shape: { error, details }.

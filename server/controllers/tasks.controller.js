@@ -1,5 +1,22 @@
 const pool = require('../db/pool');
 const { parseId } = require('../utils/ids');
+const { withTransaction } = require('../db/transaction');
+
+const NOT_A_MEMBER = {
+  error: 'Validation failed',
+  details: [{ field: 'assignee_id', message: 'Assignee must be a project member' }],
+};
+
+// True if the user is a member of the project. FOR SHARE locks the membership
+// row until the transaction ends, so the member cannot be removed from the
+// project between this check and the task being saved.
+async function lockMembership(client, projectId, userId) {
+  const result = await client.query(
+    'SELECT 1 FROM project_members WHERE project_id = $1 AND user_id = $2 FOR SHARE',
+    [projectId, userId]
+  );
+  return result.rows.length > 0;
+}
 
 const TASK_SELECT_WITH_JOINS = `
   SELECT 
@@ -107,27 +124,22 @@ async function createTask(req, res, next) {
       ? Number(req.body.assignee_id)
       : null;
 
-    if (assigneeId) {
-      const assigneeCheck = await pool.query(
-        'SELECT 1 FROM project_members WHERE project_id = $1 AND user_id = $2',
-        [projectId, assigneeId]
-      );
-      if (assigneeCheck.rows.length === 0) {
-        return res.status(400).json({
-          error: 'Validation failed',
-          details: [{ field: 'assignee_id', message: 'Assignee must be a project member' }],
-        });
+    const taskId = await withTransaction(pool, async (client) => {
+      if (assigneeId && !(await lockMembership(client, projectId, assigneeId))) {
+        return null;
       }
-    }
-
-    const insertRes = await pool.query(
-      `INSERT INTO tasks (project_id, assignee_id, created_by, title, description, status, priority, due_date)
+      const insertRes = await client.query(
+        `INSERT INTO tasks (project_id, assignee_id, created_by, title, description, status, priority, due_date)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
-      [projectId, assigneeId, req.user.id, title, description, status, priority, dueDate]
-    );
+        [projectId, assigneeId, req.user.id, title, description, status, priority, dueDate]
+      );
+      return insertRes.rows[0].id;
+    });
 
-    const taskId = insertRes.rows[0].id;
+    if (taskId === null) {
+      return res.status(400).json(NOT_A_MEMBER);
+    }
 
     const taskResult = await pool.query(
       `${TASK_SELECT_WITH_JOINS} WHERE t.id = $1`,
@@ -238,26 +250,13 @@ async function updateTask(req, res, next) {
       values.push(req.body.priority);
     }
 
+    let newAssigneeId = null;
     if (req.body.assignee_id !== undefined) {
-      const assigneeId = req.body.assignee_id !== null && req.body.assignee_id !== ''
+      newAssigneeId = req.body.assignee_id !== null && req.body.assignee_id !== ''
         ? Number(req.body.assignee_id)
         : null;
-
-      if (assigneeId) {
-        const assigneeCheck = await pool.query(
-          'SELECT 1 FROM project_members WHERE project_id = $1 AND user_id = $2',
-          [projectId, assigneeId]
-        );
-        if (assigneeCheck.rows.length === 0) {
-          return res.status(400).json({
-            error: 'Validation failed',
-            details: [{ field: 'assignee_id', message: 'Assignee must be a project member' }],
-          });
-        }
-      }
-
       updates.push(`assignee_id = $${paramIndex++}`);
-      values.push(assigneeId);
+      values.push(newAssigneeId);
     }
 
     if (req.body.due_date !== undefined) {
@@ -268,20 +267,36 @@ async function updateTask(req, res, next) {
       values.push(dueDate);
     }
 
-    if (updates.length > 0) {
-      values.push(taskId);
-      await pool.query(
+    values.push(taskId);
+    const saved = await withTransaction(pool, async (client) => {
+      if (newAssigneeId && !(await lockMembership(client, projectId, newAssigneeId))) {
+        return false;
+      }
+      await client.query(
         `UPDATE tasks
          SET ${updates.join(', ')}
          WHERE id = $${paramIndex}`,
         values
       );
+      return true;
+    });
+
+    if (!saved) {
+      return res.status(400).json(NOT_A_MEMBER);
     }
 
     const updatedResult = await pool.query(
       `${TASK_SELECT_WITH_JOINS} WHERE t.id = $1`,
       [taskId]
     );
+
+    // The task was deleted by someone else while this request was running.
+    if (updatedResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'This task does not exist.',
+        details: [],
+      });
+    }
 
     return res.json(updatedResult.rows[0]);
   } catch (err) {

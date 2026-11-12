@@ -102,6 +102,11 @@ describe('Input validation edge cases', () => {
       expectFieldError(bad, 'due_date');
     });
 
+    it('rejects a date followed by extra text', async () => {
+      const res = await auth(request(app).post(`/api/projects/${projectId}/tasks`)).send({ title: 'T', due_date: '2026-12-01garbage' });
+      expectFieldError(res, 'due_date');
+    });
+
     it('rejects an assignee id that does not fit INTEGER', async () => {
       const res = await auth(request(app).post(`/api/projects/${projectId}/tasks`)).send({ title: 'T', assignee_id: 99999999999 });
       expectFieldError(res, 'assignee_id');
@@ -138,6 +143,16 @@ describe('Input validation edge cases', () => {
       expectFieldError(res, 'password');
     });
 
+    it('counts the limit in bytes, not characters', async () => {
+      // 37 two-byte letters: 37 characters but 74 bytes
+      const res = await request(app).post('/api/auth/register').send({
+        name: 'Bytes',
+        email: 'bytes@example.com',
+        password: 'é'.repeat(37),
+      });
+      expectFieldError(res, 'password');
+    });
+
     it('accepts a password of exactly 72 bytes', async () => {
       const res = await request(app).post('/api/auth/register').send({
         name: 'Edge',
@@ -167,6 +182,34 @@ describe('Input validation edge cases', () => {
     });
   });
 
+  describe('NUL character (PostgreSQL text cannot store it)', () => {
+    const invalid = { error: 'Text contains an invalid character', details: [] };
+
+    it('is rejected in a login email without a token', async () => {
+      const res = await request(app).post('/api/auth/login').send({ email: 'a\u0000@x.io', password: 'x' });
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual(invalid);
+    });
+
+    it('is rejected in body fields', async () => {
+      const project = await auth(request(app).post('/api/projects')).send({ name: 'a\u0000' });
+      expect(project.status).toBe(400);
+
+      const title = await auth(request(app).put(`/api/tasks/${taskId}`)).send({ title: 'a\u0000' });
+      expect(title.status).toBe(400);
+
+      const comment = await auth(request(app).post(`/api/tasks/${taskId}/comments`)).send({ body: 'a\u0000' });
+      expect(comment.status).toBe(400);
+      expect(comment.body).toEqual(invalid);
+    });
+
+    it('is rejected in the query string', async () => {
+      const res = await auth(request(app).get('/api/users?search=a%00'));
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual(invalid);
+    });
+  });
+
   describe('error handler', () => {
     function run(err) {
       const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
@@ -191,6 +234,11 @@ describe('Input validation edge cases', () => {
       ['23502', 400],
       ['22003', 400],
       ['22008', 400],
+      ['22P02', 400],
+      ['22007', 400],
+      ['22001', 400],
+      ['22021', 400],
+      ['23514', 400],
     ])('maps PostgreSQL error %s to %i without leaking SQL text', (code, status) => {
       const err = Object.assign(new Error('secret sql detail'), { code });
       const out = run(err);

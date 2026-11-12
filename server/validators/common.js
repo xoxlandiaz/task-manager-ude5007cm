@@ -11,11 +11,9 @@ function isOptionalText(value) {
 // True only for a real calendar date written as YYYY-MM-DD
 // ("2026-02-31" and "2026-13-01" are rejected).
 function isValidDate(value) {
-  if (typeof value !== 'string') return false;
-  const text = value.slice(0, 10);
-  if (!dateRegex.test(text)) return false;
-  const date = new Date(`${text}T00:00:00Z`);
-  return !isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text;
+  if (typeof value !== 'string' || !dateRegex.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 function isValidId(value) {

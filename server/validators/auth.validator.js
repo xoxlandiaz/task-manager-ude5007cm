@@ -27,7 +27,7 @@ function validateRegister(body = {}) {
   } else if (password.length < 8) {
     errors.push({ field: 'password', message: 'Password must be at least 8 characters long.' });
   } else if (Buffer.byteLength(password, 'utf8') > MAX_PASSWORD_BYTES) {
-    errors.push({ field: 'password', message: 'Password must not exceed 72 characters.' });
+    errors.push({ field: 'password', message: 'Password is too long (maximum 72 bytes).' });
   }
 
   return errors;

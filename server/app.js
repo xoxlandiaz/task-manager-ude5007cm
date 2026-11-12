@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const errorHandler = require('./middleware/errorHandler');
+const rejectNullBytes = require('./middleware/rejectNullBytes');
 
 const authRoutes = require('./routes/auth.routes');
 const usersRoutes = require('./routes/users.routes');
@@ -18,6 +19,7 @@ app.disable('x-powered-by');
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use('/api', rejectNullBytes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

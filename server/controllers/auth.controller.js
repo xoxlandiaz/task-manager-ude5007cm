@@ -2,6 +2,11 @@ const pool = require('../db/pool');
 const { hashPassword, comparePassword } = require('../utils/password');
 const { signToken } = require('../utils/jwt');
 
+const EMAIL_TAKEN = {
+  error: 'Email already registered',
+  details: [{ field: 'email', message: 'Email already registered' }],
+};
+
 async function register(req, res, next) {
   try {
     const name = req.body.name.trim();
@@ -10,10 +15,7 @@ async function register(req, res, next) {
 
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
-      return res.status(409).json({
-        error: 'Email already registered',
-        details: [{ field: 'email', message: 'Email already registered' }],
-      });
+      return res.status(409).json(EMAIL_TAKEN);
     }
 
     const passwordHash = await hashPassword(password);
@@ -34,6 +36,11 @@ async function register(req, res, next) {
       },
     });
   } catch (err) {
+    // Two registrations with the same email at the same moment: the UNIQUE
+    // constraint stops the second one after the check above has passed.
+    if (err.code === '23505') {
+      return res.status(409).json(EMAIL_TAKEN);
+    }
     next(err);
   }
 }

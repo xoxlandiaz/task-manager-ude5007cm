@@ -62,7 +62,7 @@ async function createProject(req, res, next) {
       member_count: 1,
     });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally {
     client.release();
@@ -116,6 +116,14 @@ async function getProject(req, res, next) {
       WHERE p.id = $1`,
       [projectId, req.user.id]
     );
+
+    // The project was deleted by someone else while this request was running.
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: 'This project does not exist.',
+        details: [],
+      });
+    }
 
     return res.json(result.rows[0]);
   } catch (err) {
@@ -175,6 +183,14 @@ async function updateProject(req, res, next) {
          RETURNING id, owner_id, name, description, created_at, updated_at`,
         [name, projectId]
       );
+    }
+
+    // The project was deleted by someone else while this request was running.
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({
+        error: 'This project does not exist.',
+        details: [],
+      });
     }
 
     const updated = updateResult.rows[0];
@@ -416,14 +432,16 @@ async function removeMember(req, res, next) {
 
     await client.query('BEGIN');
 
-    // On member removal, unassign that user's tasks in the project
+    // Membership goes first: this waits for any task that is being assigned to
+    // the member right now (see lockMembership in tasks.controller.js), so the
+    // UPDATE below also unassigns that task.
     await client.query(
-      'UPDATE tasks SET assignee_id = NULL WHERE project_id = $1 AND assignee_id = $2',
+      'DELETE FROM project_members WHERE project_id = $1 AND user_id = $2',
       [projectId, userId]
     );
 
     await client.query(
-      'DELETE FROM project_members WHERE project_id = $1 AND user_id = $2',
+      'UPDATE tasks SET assignee_id = NULL WHERE project_id = $1 AND assignee_id = $2',
       [projectId, userId]
     );
 
@@ -431,7 +449,7 @@ async function removeMember(req, res, next) {
 
     return res.status(204).send();
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     next(err);
   } finally {
     client.release();

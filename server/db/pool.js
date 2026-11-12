@@ -14,4 +14,11 @@ if (config.databaseSsl) {
 
 const pool = new Pool(poolConfig);
 
+// An idle connection can be closed by the server (database restart, idle
+// timeout). Without a listener this 'error' event would crash the process;
+// the pool drops the dead connection by itself.
+pool.on('error', (err) => {
+  console.error('Idle PostgreSQL client error:', err.message);
+});
+
 module.exports = pool;

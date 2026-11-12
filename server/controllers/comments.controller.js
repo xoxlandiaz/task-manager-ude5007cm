@@ -150,6 +150,20 @@ async function deleteComment(req, res, next) {
     }
 
     const comment = result.rows[0];
+
+    // Someone removed from the project loses access to it, own comments included.
+    const memberCheck = await pool.query(
+      'SELECT 1 FROM project_members WHERE project_id = $1 AND user_id = $2',
+      [comment.project_id, req.user.id]
+    );
+
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({
+        error: 'You are not a member of this project.',
+        details: [],
+      });
+    }
+
     if (comment.user_id !== req.user.id && comment.owner_id !== req.user.id) {
       return res.status(403).json({
         error: 'You are not authorized to delete this comment.',

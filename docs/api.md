@@ -25,7 +25,7 @@ The token comes from register or login and is valid for `JWT_EXPIRES_IN` (defaul
 
 | Status | Meaning |
 |---|---|
-| `400` | Invalid input: a field failed validation, the JSON is malformed, or an id in the URL is not a positive integer |
+| `400` | Invalid input: a field failed validation, the JSON is malformed, an id in the URL is not a positive integer, or a text contains the NUL character |
 | `401` | Missing, invalid or expired token; wrong email or password on login |
 | `403` | Signed in, but not allowed: not a member of the project, or the action is for the owner only |
 | `404` | The project, task, comment or user does not exist |
@@ -62,7 +62,7 @@ The token comes from register or login and is valid for `JWT_EXPIRES_IN` (defaul
 | DELETE | `/tasks/:id` | Delete a task with its comments | member |
 | GET | `/tasks/:id/comments` | Comments of a task | member |
 | POST | `/tasks/:id/comments` | Add a comment | member |
-| DELETE | `/comments/:id` | Delete a comment | author or project owner |
+| DELETE | `/comments/:id` | Delete a comment | member who is the author, or the project owner |
 
 `GET /comments/:taskId` and `POST /comments/:taskId` are aliases of the two `/tasks/:id/comments` endpoints.
 
@@ -82,7 +82,7 @@ The token comes from register or login and is valid for `JWT_EXPIRES_IN` (defaul
 |---|---|
 | `name` | required, up to 100 characters |
 | `email` | required, valid email, up to 255 characters; stored in lower case |
-| `password` | required, 8 to 72 characters; stored only as a bcrypt hash |
+| `password` | required, at least 8 characters and at most 72 bytes (72 Latin characters, fewer for other alphabets); stored only as a bcrypt hash |
 
 `201`:
 
@@ -285,4 +285,4 @@ Body: `body`, required non-empty text. `201` the comment object. Errors: `400`, 
 
 ### DELETE /comments/:id
 
-`204`, no body. Allowed for the comment's author and for the owner of the project. Errors: `400`, `403`, `404`.
+`204`, no body. Allowed for the comment's author while they are still a member of the project, and for the project owner. Errors: `400`, `403`, `404`.
